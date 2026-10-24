@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tgtqm-mqsc
+  namespace: mq-kafka-bridge
+data:
+  init.mqsc: |
+    DEFINE QLOCAL(ORDERS.INBOUND) DEFPSIST(YES) REPLACE
+    DEFINE CHANNEL(FROM.SRCQM.CH1) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE
+    DEFINE CHANNEL(FROM.SRCQM.CH2) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE
+    DEFINE LISTENER(LST.1414) TRPTYPE(TCP) PORT(1414) REPLACE
+    DEFINE LISTENER(LST.1415) TRPTYPE(TCP) PORT(1415) REPLACE
+    START LISTENER(LST.1414)
+    START LISTENER(LST.1415)
+    DEFINE CHANNEL(PYTHON.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') REPLACE
+    SET CHLAUTH(PYTHON.SVRCONN) TYPE(BLOCKUSER) USERLIST('nobody') ACTION(REPLACE)
+    SET AUTHREC OBJTYPE(QMGR) PRINCIPAL('mqm') AUTHADD(CONNECT,INQ)
+    SET AUTHREC PROFILE(ORDERS.INBOUND) OBJTYPE(QUEUE) PRINCIPAL('mqm') AUTHADD(BROWSE,GET,PUT,INQ)
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tgtqm
+  namespace: mq-kafka-bridge
+spec:
+  serviceName: tgtqm
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tgtqm
+  template:
+    metadata:
+      labels:
+        app: tgtqm
+    spec:
+      containers:
+        - name: qmgr
+          image: icr.io/ibm-messaging/mq:latest
+          env:
+            - name: LICENSE
+              value: accept
+            - name: MQ_QMGR_NAME
+              value: TGTQM
+          ports:
+            - containerPort: 1414
+              name: listener1
+            - containerPort: 1415
+              name: listener2
+            - containerPort: 9443
+              name: console
+          volumeMounts:
+            - name: mqsc-config
+              mountPath: /etc/mqm/init.mqsc
+              subPath: init.mqsc
+            - name: data
+              mountPath: /mnt/mqm
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      volumes:
+        - name: mqsc-config
+          configMap:
+            name: tgtqm-mqsc
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tgtqm-svc
+  namespace: mq-kafka-bridge
+spec:
+  selector:
+    app: tgtqm
+  ports:
+    - name: mq-ch1
+      port: 1414
+      targetPort: 1414
+    - name: mq-ch2
+      port: 1415
+      targetPort: 1415
+    - name: console
+      port: 9443
+      targetPort: 9443

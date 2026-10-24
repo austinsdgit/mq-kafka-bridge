@@ -1,0 +1,120 @@
+* ============================================================
+* PROXY QUEUE MANAGER — PROXYQM
+* ============================================================
+* The head-end qmgr.  Apps PUT to INPUT.ALIAS which resolves
+* to the topic ORDERS/INPUT.  Two durable subscriptions fan the
+* topic out via separate SDR channels to QMGRA and QMGRB.
+*
+* PROXYQM has NO local ORDERS.INBOUND queue — it is a pure
+* routing tier.  The browse connector reads QMGRA; the delete
+* connector targets QMGRB.
+* ============================================================
+
+* ----- Topic object -----
+DEFINE TOPIC('ORDERS.INPUT') +
+    TOPICSTR('ORDERS/INPUT') +
+    DEFPSIST(YES) +
+    REPLACE
+
+* ----- Alias queue (app entry point) -----
+DEFINE QALIAS(INPUT.ALIAS) +
+    TARGTYPE(TOPIC) +
+    TARGET('ORDERS.INPUT') +
+    DEFPSIST(YES) +
+    REPLACE
+
+* ---- Transmission queues ----
+DEFINE QLOCAL(XMITQ.QMGRA) +
+    USAGE(XMITQ) +
+    DEFPSIST(YES) +
+    REPLACE
+
+DEFINE QLOCAL(XMITQ.QMGRB) +
+    USAGE(XMITQ) +
+    DEFPSIST(YES) +
+    REPLACE
+
+* ----- Remote queue stubs (subscriptions deliver here) -----
+DEFINE QREMOTE(REMOTE.QMGRA.ORDERS) +
+    RNAME(ORDERS.INBOUND) +
+    RQMNAME(QMGRA) +
+    XMITQ(XMITQ.QMGRA) +
+    DEFPSIST(YES) +
+    REPLACE
+
+DEFINE QREMOTE(REMOTE.QMGRB.ORDERS) +
+    RNAME(ORDERS.INBOUND) +
+    RQMNAME(QMGRB) +
+    XMITQ(XMITQ.QMGRB) +
+    DEFPSIST(YES) +
+    REPLACE
+
+* ----- Subscriptions: fan topic out to QMGRA and QMGRB -----
+DEFINE SUB(SUB.TO.QMGRA) +
+    TOPICOBJ('ORDERS.INPUT') +
+    DEST(REMOTE.QMGRA.ORDERS) +
+    REPLACE
+
+DEFINE SUB(SUB.TO.QMGRB) +
+    TOPICOBJ('ORDERS.INPUT') +
+    DEST(REMOTE.QMGRB.ORDERS) +
+    REPLACE
+
+* ----- Sender channel → QMGRA -----
+DEFINE CHANNEL(TO.QMGRA) +
+    CHLTYPE(SDR) +
+    CONNAME('qmgra-ibm-mq.cp4i.svc.cluster.local(1414)') +
+    XMITQ(XMITQ.QMGRA) +
+    TRPTYPE(TCP) +
+    REPLACE
+
+* ----- Sender channel → QMGRB -----
+DEFINE CHANNEL(TO.QMGRB) +
+    CHLTYPE(SDR) +
+    CONNAME('qmgrb-ibm-mq.cp4i.svc.cluster.local(1414)') +
+    XMITQ(XMITQ.QMGRB) +
+    TRPTYPE(TCP) +
+    REPLACE
+
+* ----- SVRCONN for the API service (PUT to INPUT.ALIAS) -----
+DEFINE CHANNEL(APP.SVRCONN) +
+    CHLTYPE(SVRCONN) +
+    TRPTYPE(TCP) +
+    MCAUSER('app') +
+    REPLACE
+SET CHLAUTH(APP.SVRCONN) +
+    TYPE(ADDRESSMAP) +
+    ADDRESS('*') +
+    USERSRC(CHANNEL) +
+    CHCKCLNT(ASQMGR) +
+    ACTION(REPLACE)
+SET AUTHREC OBJTYPE(QMGR) +
+    PRINCIPAL('app') +
+    AUTHADD(CONNECT,INQ)
+SET AUTHREC PROFILE(INPUT.ALIAS) +
+    OBJTYPE(QUEUE) +
+    PRINCIPAL('app') +
+    AUTHADD(PUT,INQ)
+SET AUTHREC PROFILE('ORDERS.INPUT') +
+    OBJTYPE(TOPIC) +
+    PRINCIPAL('app') +
+    AUTHADD(PUB)
+
+* ----- SVRCONN for QMGRNHA console (remote QM registration) -----
+DEFINE CHANNEL(DEV.ADMIN.SVRCONN) +
+    CHLTYPE(SVRCONN) +
+    TRPTYPE(TCP) +
+    MCAUSER('admin') +
+    REPLACE
+SET CHLAUTH(DEV.ADMIN.SVRCONN) +
+    TYPE(ADDRESSMAP) +
+    ADDRESS('*') +
+    USERSRC(CHANNEL) +
+    CHCKCLNT(ASQMGR) +
+    ACTION(REPLACE)
+SET AUTHREC OBJTYPE(QMGR) +
+    PRINCIPAL('admin') +
+    AUTHADD(CONNECT,INQ,DSP,ALLADM)
+
+START CHANNEL(TO.QMGRA)
+START CHANNEL(TO.QMGRB)

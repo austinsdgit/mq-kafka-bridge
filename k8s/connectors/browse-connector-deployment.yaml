@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mq-credentials
+  namespace: mq-kafka-bridge
+type: Opaque
+stringData:
+  MQ_USER: mqm
+  MQ_PASSWORD: ""        # set to your actual password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: browse-connector
+  namespace: mq-kafka-bridge
+  labels:
+    app: browse-connector
+spec:
+  replicas: 1   # single instance — browse is not partitioned
+  selector:
+    matchLabels:
+      app: browse-connector
+  template:
+    metadata:
+      labels:
+        app: browse-connector
+    spec:
+      containers:
+        - name: browse-connector
+          image: your-registry/browse-connector:latest   # replace with your image
+          imagePullPolicy: Always
+          env:
+            - name: MQ_HOST
+              value: "tgtqm-svc.mq-kafka-bridge.svc.cluster.local"
+            - name: MQ_PORT
+              value: "1414"
+            - name: MQ_QMGR
+              value: "TGTQM"
+            - name: MQ_QUEUE
+              value: "ORDERS.INBOUND"
+            - name: MQ_CHANNEL
+              value: "PYTHON.SVRCONN"
+            - name: MQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mq-credentials
+                  key: MQ_USER
+            - name: MQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-credentials
+                  key: MQ_PASSWORD
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka-primary-kafka-bootstrap.kafka-primary.svc.cluster.local:9092"
+            - name: KAFKA_TOPIC
+              value: "mq.orders.correlids"
+            - name: BROWSE_INTERVAL_SECONDS
+              value: "60"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import os; os.getpid()"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+      restartPolicy: Always

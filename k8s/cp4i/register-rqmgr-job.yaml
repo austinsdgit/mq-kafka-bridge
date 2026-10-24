@@ -1,0 +1,100 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: register-rqmgr
+  namespace: cp4i
+  labels:
+    app: mq-kafka-bridge
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: register
+          image: python:3.12-slim
+          command: [python3, /scripts/register.py]
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: qmgrnha-register-rqmgr-py
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qmgrnha-register-rqmgr-py
+  namespace: cp4i
+data:
+  register.py: |
+    import urllib.request, urllib.error, ssl, http.cookiejar, urllib.parse, json, time
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    cj = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPSHandler(context=ctx),
+        urllib.request.HTTPCookieProcessor(cj)
+    )
+    BASE = "https://qmgrnha-ibm-mq.cp4i.svc.cluster.local:9443"
+
+    # Wait for console to be available
+    for attempt in range(30):
+        try:
+            opener.open(urllib.request.Request(BASE + "/ibmmq/console/",
+                headers={"ibm-mq-rest-csrf-token": "blank"}), timeout=5)
+            print("Console reachable")
+            break
+        except Exception as e:
+            print(f"Waiting for console ({attempt+1}/30): {e}")
+            time.sleep(10)
+
+    # Form login
+    login_data = urllib.parse.urlencode({"j_username": "admin", "j_password": "admin123"}).encode()
+    opener.open(urllib.request.Request(BASE + "/ibmmq/console/j_security_check",
+        data=login_data,
+        headers={"Content-Type": "application/x-www-form-urlencoded",
+                 "ibm-mq-rest-csrf-token": "blank"}), timeout=10)
+    print("Logged in")
+
+    def make_ccdt(qmgr, channel, host, port):
+        return json.dumps({
+            "name": channel,
+            "clientConnection": {
+                "connection": [{"host": host, "port": port}],
+                "queueManager": qmgr
+            }
+        })
+
+    RQMGR_URL = BASE + "/ibmmq/console/internal/ibmmq/rqmgr/"
+    HDRS = {"Content-Type": "application/json", "ibm-mq-csrf-token": "value"}
+
+    qmgrs = [
+        ("PROXYQM", "DEV.ADMIN.SVRCONN", "proxyqm-ibm-mq.cp4i.svc.cluster.local", 1414),
+        ("QMGRA",   "DEV.ADMIN.SVRCONN", "qmgra-ibm-mq.cp4i.svc.cluster.local",   1414),
+        ("QMGRB",   "DEV.ADMIN.SVRCONN", "qmgrb-ibm-mq.cp4i.svc.cluster.local",   1414),
+    ]
+
+    for qmgr_name, channel, host, port in qmgrs:
+        payload = json.dumps({
+            "id": qmgr_name,
+            "qmgrName": qmgr_name,
+            "ccdtData": make_ccdt(qmgr_name, channel, host, port),
+            "username": "admin",
+            "password": "admin123"
+        }).encode()
+        req = urllib.request.Request(RQMGR_URL, data=payload, headers=HDRS)
+        req.get_method = lambda: "POST"
+        try:
+            r = opener.open(req, timeout=10)
+            print(f"Registered {qmgr_name}: HTTP {r.status}")
+        except urllib.error.HTTPError as e:
+            body = e.read()[:200].decode()
+            print(f"Register {qmgr_name}: ERR {e.code} {body}")
+        except Exception as ex:
+            print(f"Register {qmgr_name}: EX {ex}")
+
+    print("Done.")

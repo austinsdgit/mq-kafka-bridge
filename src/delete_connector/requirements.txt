@@ -1,0 +1,2 @@
+pymqi==1.12.13
+confluent-kafka==2.4.0

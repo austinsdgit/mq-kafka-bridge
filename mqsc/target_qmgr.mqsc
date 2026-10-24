@@ -1,0 +1,58 @@
+* ============================================================
+* TARGET QUEUE MANAGER — TGTQM
+* ============================================================
+* Receives inbound messages from SRCQM via two HA receiver
+* channels on separate listener ports.  The browse connector
+* reads from ORDERS.INBOUND.
+* ============================================================
+
+* ----- Inbound queue (where messages land after routing) -----
+DEFINE QLOCAL(ORDERS.INBOUND) +
+    DEFPSIST(YES) +
+    REPLACE
+
+* ----- Receiver channels (one per sender on SRCQM) -----
+DEFINE CHANNEL(FROM.SRCQM.CH1) +
+    CHLTYPE(RCVR) +
+    TRPTYPE(TCP) +
+    REPLACE
+
+DEFINE CHANNEL(FROM.SRCQM.CH2) +
+    CHLTYPE(RCVR) +
+    TRPTYPE(TCP) +
+    REPLACE
+
+* ----- Listeners -----
+DEFINE LISTENER(LST.1414) +
+    TRPTYPE(TCP) +
+    PORT(1414) +
+    REPLACE
+
+DEFINE LISTENER(LST.1415) +
+    TRPTYPE(TCP) +
+    PORT(1415) +
+    REPLACE
+
+START LISTENER(LST.1414)
+START LISTENER(LST.1415)
+
+* ----- SVRCONN for Python connectors -----
+DEFINE CHANNEL(PYTHON.SVRCONN) +
+    CHLTYPE(SVRCONN) +
+    MCAUSER('mqm') +
+    TRPTYPE(TCP) +
+    REPLACE
+
+SET CHLAUTH(PYTHON.SVRCONN) +
+    TYPE(BLOCKUSER) +
+    USERLIST('nobody') +
+    ACTION(REPLACE)
+
+SET AUTHREC OBJTYPE(QMGR) +
+    PRINCIPAL('mqm') +
+    AUTHADD(CONNECT,INQ)
+
+SET AUTHREC PROFILE(ORDERS.INBOUND) +
+    OBJTYPE(QUEUE) +
+    PRINCIPAL('mqm') +
+    AUTHADD(BROWSE,GET,PUT,INQ)

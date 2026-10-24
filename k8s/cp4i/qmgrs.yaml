@@ -1,0 +1,412 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# 3 physical queue managers for mq-kafka-bridge
+#
+#  PROXYQM  — head-end; app PUTs to INPUT.ALIAS → topic → subs → QMGRA + QMGRB
+#  QMGRA    — subscriber A; browse connector reads ORDERS.INBOUND from here
+#  QMGRB    — subscriber B; delete connector targets ORDERS.INBOUND here
+#
+# Services:
+#   proxyqm-ibm-mq  :1414
+#   qmgra-ibm-mq    :1414
+#   qmgrb-ibm-mq    :1414
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Shared MQ credentials secret ──────────────────────────────────────────────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mq-bridge-secret
+  namespace: cp4i
+type: Opaque
+stringData:
+  adminPassword: admin123
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# PROXYQM
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: proxyqm-mqsc
+  namespace: cp4i
+data:
+  config.mqsc: |
+    * ── Topic ──────────────────────────────────────────────────────
+    DEFINE TOPIC('ORDERS.INPUT') TOPICSTR('ORDERS/INPUT') DEFPSIST(YES) REPLACE
+
+    * ── Alias queue (app entry point) ──────────────────────────────
+    DEFINE QALIAS(INPUT.ALIAS) TARGTYPE(TOPIC) TARGET('ORDERS.INPUT') DEFPSIST(YES) REPLACE
+
+    * ── Transmission queues ─────────────────────────────────────────
+    DEFINE QLOCAL(XMITQ.QMGRA) USAGE(XMITQ) DEFPSIST(YES) REPLACE
+    DEFINE QLOCAL(XMITQ.QMGRB) USAGE(XMITQ) DEFPSIST(YES) REPLACE
+
+    * ── Remote queue stubs (subscriptions deliver here) ────────────
+    DEFINE QREMOTE(REMOTE.QMGRA.ORDERS) RNAME(ORDERS.INBOUND) RQMNAME(QMGRA) XMITQ(XMITQ.QMGRA) DEFPSIST(YES) REPLACE
+    DEFINE QREMOTE(REMOTE.QMGRB.ORDERS) RNAME(ORDERS.INBOUND) RQMNAME(QMGRB) XMITQ(XMITQ.QMGRB) DEFPSIST(YES) REPLACE
+
+    * ── Subscriptions: fan topic → QMGRA and QMGRB ─────────────────
+    * DESTCORL(000...) ensures the application CorrelId is preserved on delivery
+    DEFINE SUB(SUB.TO.QMGRA) TOPICOBJ('ORDERS.INPUT') DEST(REMOTE.QMGRA.ORDERS) DESTCORL(000000000000000000000000000000000000000000000000) REPLACE
+    DEFINE SUB(SUB.TO.QMGRB) TOPICOBJ('ORDERS.INPUT') DEST(REMOTE.QMGRB.ORDERS) DESTCORL(000000000000000000000000000000000000000000000000) REPLACE
+
+    * ── SDR channels to QMGRA and QMGRB ────────────────────────────
+    DEFINE CHANNEL(TO.QMGRA) CHLTYPE(SDR) CONNAME('qmgra-ibm-mq.cp4i.svc.cluster.local(1414)') XMITQ(XMITQ.QMGRA) TRPTYPE(TCP) REPLACE
+    DEFINE CHANNEL(TO.QMGRB) CHLTYPE(SDR) CONNAME('qmgrb-ibm-mq.cp4i.svc.cluster.local(1414)') XMITQ(XMITQ.QMGRB) TRPTYPE(TCP) REPLACE
+
+    * ── CONNAUTH: allow client connections without OS password check ─
+    ALTER AUTHINFO(DEV.AUTHINFO) AUTHTYPE(IDPWOS) CHCKCLNT(OPTIONAL)
+
+    * ── SVRCONN for QMGRNHA console — remove default USERMAP so admin is not remapped to mqm ─
+    REMOVE CHLAUTH(DEV.ADMIN.SVRCONN) TYPE(USERMAP) CLNTUSER('admin')
+
+    * ── SVRCONN for API service (PUT to INPUT.ALIAS) ────────────────
+    DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('app') REPLACE
+    SET CHLAUTH(APP.SVRCONN) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(ASQMGR) ACTION(REPLACE)
+    SET AUTHREC OBJTYPE(QMGR) PRINCIPAL('app') AUTHADD(CONNECT,INQ)
+    SET AUTHREC PROFILE(INPUT.ALIAS) OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD(PUT,INQ)
+    SET AUTHREC PROFILE('ORDERS.INPUT') OBJTYPE(TOPIC) PRINCIPAL('app') AUTHADD(PUB)
+    SET AUTHREC PROFILE('**') PRINCIPAL('app') OBJTYPE(QUEUE) AUTHADD(PUT,GET,INQ,DSP)
+
+    * ── SVRCONN for QMGRNHA console (remote QM registration) ────────
+    DEFINE CHANNEL(DEV.ADMIN.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('admin') REPLACE
+    SET CHLAUTH(DEV.ADMIN.SVRCONN) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(ASQMGR) ACTION(REPLACE)
+    SET AUTHREC OBJTYPE(QMGR) PRINCIPAL('admin') AUTHADD(CONNECT,INQ,DSP,ALLADM)
+
+    * ── Start sender channels ────────────────────────────────────────
+    START CHANNEL(TO.QMGRA)
+    START CHANNEL(TO.QMGRB)
+
+    REFRESH SECURITY TYPE(CONNAUTH)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxyqm-ibm-mq
+  namespace: cp4i
+  labels:
+    app: proxyqm-ibm-mq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: proxyqm-ibm-mq
+  template:
+    metadata:
+      labels:
+        app: proxyqm-ibm-mq
+    spec:
+      containers:
+        - name: qmgr
+          image: icr.io/ibm-messaging/mq:latest
+          env:
+            - name: LICENSE
+              value: accept
+            - name: MQ_QMGR_NAME
+              value: PROXYQM
+            - name: MQ_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-bridge-secret
+                  key: adminPassword
+            - name: MQ_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-bridge-secret
+                  key: adminPassword
+          ports:
+            - containerPort: 1414
+              name: mq
+            - containerPort: 9443
+              name: console
+          volumeMounts:
+            - name: mqsc-config
+              mountPath: /etc/mqm/config.mqsc
+              subPath: config.mqsc
+            - name: mq-data
+              mountPath: /mnt/mqm
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["chkmqready"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["chkmqlive"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: mqsc-config
+          configMap:
+            name: proxyqm-mqsc
+        - name: mq-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxyqm-ibm-mq
+  namespace: cp4i
+spec:
+  selector:
+    app: proxyqm-ibm-mq
+  ports:
+    - name: mq
+      port: 1414
+      targetPort: 1414
+    - name: console
+      port: 9443
+      targetPort: 9443
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# QMGRA  —  browse connector reads ORDERS.INBOUND from here
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qmgra-mqsc
+  namespace: cp4i
+data:
+  config.mqsc: |
+    * ── Inbound queue ──────────────────────────────────────────────
+    DEFINE QLOCAL(ORDERS.INBOUND) DEFPSIST(YES) REPLACE
+
+    * ── Receiver channel — name must match SDR name on PROXYQM ─────
+    DEFINE CHANNEL(TO.QMGRA) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE
+    SET CHLAUTH(TO.QMGRA) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(ASQMGR) ACTION(REPLACE)
+
+    * ── CONNAUTH: allow client connections without OS password check ─
+    ALTER AUTHINFO(DEV.AUTHINFO) AUTHTYPE(IDPWOS) CHCKCLNT(OPTIONAL)
+
+    * ── Remove default USERMAP so admin is not remapped to mqm ──────
+    REMOVE CHLAUTH(DEV.ADMIN.SVRCONN) TYPE(USERMAP) CLNTUSER('admin')
+
+    * ── SVRCONN for browse connector ────────────────────────────────
+    DEFINE CHANNEL(BROWSE.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('app') REPLACE
+    SET CHLAUTH(BROWSE.SVRCONN) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(ASQMGR) ACTION(REPLACE)
+    SET AUTHREC OBJTYPE(QMGR) PRINCIPAL('app') AUTHADD(CONNECT,INQ)
+    SET AUTHREC PROFILE(ORDERS.INBOUND) OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD(BROWSE,GET,INQ,DSP)
+    SET AUTHREC PROFILE('**') PRINCIPAL('app') OBJTYPE(QUEUE) AUTHADD(BROWSE,GET,INQ,DSP)
+
+    * ── SVRCONN for QMGRNHA console (remote QM registration) ────────
+    DEFINE CHANNEL(DEV.ADMIN.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('admin') REPLACE
+    SET CHLAUTH(DEV.ADMIN.SVRCONN) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(ASQMGR) ACTION(REPLACE)
+    SET AUTHREC OBJTYPE(QMGR) PRINCIPAL('admin') AUTHADD(CONNECT,INQ,DSP,ALLADM)
+
+    REFRESH SECURITY TYPE(CONNAUTH)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qmgra-ibm-mq
+  namespace: cp4i
+  labels:
+    app: qmgra-ibm-mq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qmgra-ibm-mq
+  template:
+    metadata:
+      labels:
+        app: qmgra-ibm-mq
+    spec:
+      containers:
+        - name: qmgr
+          image: icr.io/ibm-messaging/mq:latest
+          env:
+            - name: LICENSE
+              value: accept
+            - name: MQ_QMGR_NAME
+              value: QMGRA
+            - name: MQ_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-bridge-secret
+                  key: adminPassword
+            - name: MQ_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-bridge-secret
+                  key: adminPassword
+          ports:
+            - containerPort: 1414
+              name: mq
+            - containerPort: 9443
+              name: console
+          volumeMounts:
+            - name: mqsc-config
+              mountPath: /etc/mqm/config.mqsc
+              subPath: config.mqsc
+            - name: mq-data
+              mountPath: /mnt/mqm
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["chkmqready"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["chkmqlive"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: mqsc-config
+          configMap:
+            name: qmgra-mqsc
+        - name: mq-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qmgra-ibm-mq
+  namespace: cp4i
+spec:
+  selector:
+    app: qmgra-ibm-mq
+  ports:
+    - name: mq
+      port: 1414
+      targetPort: 1414
+    - name: console
+      port: 9443
+      targetPort: 9443
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# QMGRB  —  delete connector targets ORDERS.INBOUND here
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qmgrb-mqsc
+  namespace: cp4i
+data:
+  config.mqsc: |
+    * ── Inbound queue ──────────────────────────────────────────────
+    DEFINE QLOCAL(ORDERS.INBOUND) DEFPSIST(YES) REPLACE
+
+    * ── Receiver channel — name must match SDR name on PROXYQM ─────
+    DEFINE CHANNEL(TO.QMGRB) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE
+    SET CHLAUTH(TO.QMGRB) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(ASQMGR) ACTION(REPLACE)
+
+    * ── CONNAUTH: allow client connections without OS password check ─
+    ALTER AUTHINFO(DEV.AUTHINFO) AUTHTYPE(IDPWOS) CHCKCLNT(OPTIONAL)
+
+    * ── SVRCONN for delete connector ────────────────────────────────
+    DEFINE CHANNEL(DELETE.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('app') REPLACE
+    SET CHLAUTH(DELETE.SVRCONN) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(ASQMGR) ACTION(REPLACE)
+    SET AUTHREC OBJTYPE(QMGR) PRINCIPAL('app') AUTHADD(CONNECT,INQ)
+    SET AUTHREC PROFILE(ORDERS.INBOUND) OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD(BROWSE,GET,INQ,DSP)
+    SET AUTHREC PROFILE('**') PRINCIPAL('app') OBJTYPE(QUEUE) AUTHADD(BROWSE,GET,INQ,DSP)
+
+    * ── SVRCONN for QMGRNHA console (remote QM registration) ────────
+    DEFINE CHANNEL(DEV.ADMIN.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('admin') REPLACE
+    SET CHLAUTH(DEV.ADMIN.SVRCONN) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(ASQMGR) ACTION(REPLACE)
+    SET AUTHREC OBJTYPE(QMGR) PRINCIPAL('admin') AUTHADD(CONNECT,INQ,DSP,ALLADM)
+
+    REFRESH SECURITY TYPE(CONNAUTH)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qmgrb-ibm-mq
+  namespace: cp4i
+  labels:
+    app: qmgrb-ibm-mq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qmgrb-ibm-mq
+  template:
+    metadata:
+      labels:
+        app: qmgrb-ibm-mq
+    spec:
+      containers:
+        - name: qmgr
+          image: icr.io/ibm-messaging/mq:latest
+          env:
+            - name: LICENSE
+              value: accept
+            - name: MQ_QMGR_NAME
+              value: QMGRB
+            - name: MQ_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-bridge-secret
+                  key: adminPassword
+            - name: MQ_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-bridge-secret
+                  key: adminPassword
+          ports:
+            - containerPort: 1414
+              name: mq
+            - containerPort: 9443
+              name: console
+          volumeMounts:
+            - name: mqsc-config
+              mountPath: /etc/mqm/config.mqsc
+              subPath: config.mqsc
+            - name: mq-data
+              mountPath: /mnt/mqm
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["chkmqready"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["chkmqlive"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: mqsc-config
+          configMap:
+            name: qmgrb-mqsc
+        - name: mq-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qmgrb-ibm-mq
+  namespace: cp4i
+spec:
+  selector:
+    app: qmgrb-ibm-mq
+  ports:
+    - name: mq
+      port: 1414
+      targetPort: 1414
+    - name: console
+      port: 9443
+      targetPort: 9443

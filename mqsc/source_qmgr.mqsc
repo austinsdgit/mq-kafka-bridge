@@ -1,0 +1,81 @@
+* ============================================================
+* SOURCE QUEUE MANAGER — SRCQM
+* ============================================================
+* Applications publish to INPUT.ALIAS which resolves to the
+* topic ORDERS/INPUT.  Two subscriptions fan the topic out to
+* two transmission queues, each reaching TGTQM via its own
+* SVRCONN channel / listener port for HA.
+* ============================================================
+
+* ----- Topic object -----
+DEFINE TOPIC('ORDERS.INPUT') +
+    TOPICSTR('ORDERS/INPUT') +
+    DEFPSIST(YES) +
+    REPLACE
+
+* ----- Alias queue pointing at the topic -----
+DEFINE QALIAS(INPUT.ALIAS) +
+    TARGTYPE(TOPIC) +
+    TARGET('ORDERS.INPUT') +
+    DEFPSIST(YES) +
+    REPLACE
+
+* ----- Transmission queues (one per HA channel) -----
+DEFINE QLOCAL(XMITQ.TGTQM.CH1) +
+    USAGE(XMITQ) +
+    DEFPSIST(YES) +
+    REPLACE
+
+DEFINE QLOCAL(XMITQ.TGTQM.CH2) +
+    USAGE(XMITQ) +
+    DEFPSIST(YES) +
+    REPLACE
+
+* ----- Remote queue definitions (subscriptions deliver here) -----
+DEFINE QREMOTE(REMOTE.ORDERS.Q1) +
+    RNAME(ORDERS.INBOUND) +
+    RQMNAME(TGTQM) +
+    XMITQ(XMITQ.TGTQM.CH1) +
+    DEFPSIST(YES) +
+    REPLACE
+
+DEFINE QREMOTE(REMOTE.ORDERS.Q2) +
+    RNAME(ORDERS.INBOUND) +
+    RQMNAME(TGTQM) +
+    XMITQ(XMITQ.TGTQM.CH2) +
+    DEFPSIST(YES) +
+    REPLACE
+
+* ----- Topic subscriptions (fan-out to both HA paths) -----
+DEFINE SUB(SUB.ORDERS.HA1) +
+    TOPICOBJ('ORDERS.INPUT') +
+    TOPICSTR('ORDERS/INPUT') +
+    DEST(REMOTE.ORDERS.Q1) +
+    DEFPSIST(YES) +
+    REPLACE
+
+DEFINE SUB(SUB.ORDERS.HA2) +
+    TOPICOBJ('ORDERS.INPUT') +
+    TOPICSTR('ORDERS/INPUT') +
+    DEST(REMOTE.ORDERS.Q2) +
+    DEFPSIST(YES) +
+    REPLACE
+
+* ----- Sender channels (one per listener port on TGTQM) -----
+DEFINE CHANNEL(TO.TGTQM.CH1) +
+    CHLTYPE(SDR) +
+    CONNAME('tgtqm-svc(1414)') +
+    XMITQ(XMITQ.TGTQM.CH1) +
+    TRPTYPE(TCP) +
+    REPLACE
+
+DEFINE CHANNEL(TO.TGTQM.CH2) +
+    CHLTYPE(SDR) +
+    CONNAME('tgtqm-svc(1415)') +
+    XMITQ(XMITQ.TGTQM.CH2) +
+    TRPTYPE(TCP) +
+    REPLACE
+
+* ----- Start both sender channels -----
+START CHANNEL(TO.TGTQM.CH1)
+START CHANNEL(TO.TGTQM.CH2)

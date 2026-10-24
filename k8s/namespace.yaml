@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mq-kafka-bridge
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kafka-primary
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kafka-secondary

@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: register-rqmgr
+  namespace: cp4i
+  labels:
+    app: mq-kafka-bridge
+spec:
+  schedule: "*/5 * * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: rqmgr-registrar
+          containers:
+            - name: register
+              image: image-registry.openshift-image-registry.svc:5000/openshift/cli:latest
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+                  POD=$(oc get pod -n cp4i -l app=qmgrnha-ibm-mq --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+                  echo "Registering remote qmgrs in pod $POD"
+                  oc exec -n cp4i $POD -- bash -c '
+                    GCCDT=/mnt/mqm/data/web/installations/Installation1/generated.ccdt
+                    mkdir -p $GCCDT
+                    for ENTRY in "PROXYQM:DEV.ADMIN.SVRCONN:proxyqm-ibm-mq.cp4i.svc.cluster.local:1414" \
+                                 "QMGRA:DEV.ADMIN.SVRCONN:qmgra-ibm-mq.cp4i.svc.cluster.local:1414" \
+                                 "QMGRB:DEV.ADMIN.SVRCONN:qmgrb-ibm-mq.cp4i.svc.cluster.local:1414"; do
+                      QMGR=$(echo $ENTRY | cut -d: -f1)
+                      CHAN=$(echo $ENTRY | cut -d: -f2)
+                      HOST=$(echo $ENTRY | cut -d: -f3)
+                      PORT=$(echo $ENTRY | cut -d: -f4)
+                      FILE=$GCCDT/ccdt-${QMGR}.json
+                      printf '"'"'{"name":"%s","clientConnection":{"connection":[{"host":"%s","port":%s}],"queueManager":"%s"}}'"'"' $CHAN $HOST $PORT $QMGR > $FILE
+                      OUT=$(setmqweb remote add -uniqueName $QMGR -qmgrName $QMGR -ccdtURL $FILE -visibility console -username admin -password admin123 2>&1)
+                      echo "$QMGR: $(echo $OUT | grep -q Duplicate && echo already_registered || echo "$OUT")"
+                    done
+                  '

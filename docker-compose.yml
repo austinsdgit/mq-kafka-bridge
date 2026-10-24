@@ -1,0 +1,182 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MQ / Kafka Bridge — local development compose
+#
+# Starts:
+#   srcqm          — source queue manager (publishes to alias → topic → subs)
+#   tgtqm          — target queue manager (receives routed messages)
+#   kafka-primary  — primary Kafka broker (single node)
+#   kafka-secondary— secondary Kafka broker (single node, mirrors primary via MM2)
+#   zookeeper-p    — ZooKeeper for primary
+#   zookeeper-s    — ZooKeeper for secondary
+#   mm2            — MirrorMaker 2 container (primary → secondary)
+#   browse-connector — Python browse connector
+#   delete-connector — Python delete connector
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── MQ: Source Queue Manager ──────────────────────────────────────────────
+  srcqm:
+    image: icr.io/ibm-messaging/mq:latest
+    environment:
+      LICENSE: accept
+      MQ_QMGR_NAME: SRCQM
+    ports:
+      - "1413:1414"
+      - "9443:9443"
+    volumes:
+      - ./mqsc/source_qmgr.mqsc:/etc/mqm/init.mqsc:ro
+      - srcqm-data:/mnt/mqm
+    networks:
+      - mq-net
+
+  # ── MQ: Target Queue Manager ──────────────────────────────────────────────
+  tgtqm:
+    image: icr.io/ibm-messaging/mq:latest
+    environment:
+      LICENSE: accept
+      MQ_QMGR_NAME: TGTQM
+    ports:
+      - "1414:1414"
+      - "1415:1415"
+      - "9444:9443"
+    volumes:
+      - ./mqsc/target_qmgr.mqsc:/etc/mqm/init.mqsc:ro
+      - tgtqm-data:/mnt/mqm
+    networks:
+      - mq-net
+
+  # ── Kafka: Primary cluster ─────────────────────────────────────────────────
+  zookeeper-p:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - kafka-primary-net
+
+  kafka-primary:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on: [zookeeper-p]
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-p:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-primary:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 24
+    networks:
+      - kafka-primary-net
+      - mm2-net
+
+  # ── Kafka: Secondary cluster ───────────────────────────────────────────────
+  zookeeper-s:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2182
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - kafka-secondary-net
+
+  kafka-secondary:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on: [zookeeper-s]
+    ports:
+      - "9093:9092"
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-s:2182
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-secondary:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 24
+    networks:
+      - kafka-secondary-net
+      - mm2-net
+
+  # ── MirrorMaker 2 ──────────────────────────────────────────────────────────
+  mm2:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on: [kafka-primary, kafka-secondary]
+    command: >
+      bash -c "
+        cat > /tmp/mm2.properties <<'EOF'
+        clusters = primary, secondary
+        primary.bootstrap.servers = kafka-primary:9092
+        secondary.bootstrap.servers = kafka-secondary:9092
+        primary->secondary.enabled = true
+        primary->secondary.topics = mq\\.orders\\.correlids
+        primary->secondary.groups = mq-delete-connector
+        replication.policy.class = org.apache.kafka.connect.mirror.IdentityReplicationPolicy
+        primary->secondary.sync.group.offsets.enabled = true
+        primary->secondary.sync.group.offsets.interval.seconds = 10
+        EOF
+        /usr/bin/connect-mirror-maker /tmp/mm2.properties
+      "
+    networks:
+      - mm2-net
+
+  # ── Python: Browse connector ───────────────────────────────────────────────
+  browse-connector:
+    build:
+      context: ./src/browse_connector
+    env_file: ./config/browse_connector.env
+    depends_on: [tgtqm, kafka-primary]
+    networks:
+      - mq-net
+      - kafka-primary-net
+    restart: on-failure
+
+  # ── Python: Delete connector ───────────────────────────────────────────────
+  delete-connector:
+    build:
+      context: ./src/delete_connector
+    env_file: ./config/delete_connector.env
+    depends_on: [tgtqm, kafka-secondary, mm2, api]
+    networks:
+      - mq-net
+      - kafka-secondary-net
+    restart: on-failure
+
+  # ── FastAPI: Bridge API ────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./src/api
+    env_file: ./config/api.env
+    ports:
+      - "8000:8000"
+    depends_on: [srcqm, tgtqm]
+    networks:
+      - mq-net
+    restart: on-failure
+
+  # ── React UI (dev hot-reload) ──────────────────────────────────────────────
+  ui:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./src/ui:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    depends_on: [api]
+    networks:
+      - mq-net
+    environment:
+      - VITE_API_BASE=http://api:8000
+
+volumes:
+  srcqm-data:
+  tgtqm-data:
+
+networks:
+  mq-net:
+  kafka-primary-net:
+  kafka-secondary-net:
+  mm2-net:

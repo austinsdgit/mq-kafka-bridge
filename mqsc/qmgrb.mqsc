@@ -1,0 +1,70 @@
+* ============================================================
+* QMGR B — QMGRB
+* ============================================================
+* Upstream subscriber B.  Receives every message routed from
+* PROXYQM via SUB.TO.QMGRB.  The delete connector connects
+* here, browses forward to the CorrelId checkpointed in Kafka,
+* and destructively GETs all messages before it.
+* ============================================================
+
+* ----- Inbound queue (delete connector targets this) -----
+DEFINE QLOCAL(ORDERS.INBOUND) +
+    DEFPSIST(YES) +
+    REPLACE
+
+* ----- Receiver channel (accepts messages from PROXYQM) -----
+DEFINE CHANNEL(TO.QMGRB) +
+    CHLTYPE(RCVR) +
+    TRPTYPE(TCP) +
+    REPLACE
+SET CHLAUTH(TO.QMGRB) +
+    TYPE(ADDRESSMAP) +
+    ADDRESS('*') +
+    USERSRC(CHANNEL) +
+    CHCKCLNT(ASQMGR) +
+    ACTION(REPLACE)
+
+* ----- Listener -----
+DEFINE LISTENER(LST.1414) +
+    TRPTYPE(TCP) +
+    PORT(1414) +
+    REPLACE
+START LISTENER(LST.1414)
+
+* ----- SVRCONN for the delete connector -----
+DEFINE CHANNEL(DELETE.SVRCONN) +
+    CHLTYPE(SVRCONN) +
+    TRPTYPE(TCP) +
+    MCAUSER('app') +
+    REPLACE
+SET CHLAUTH(DELETE.SVRCONN) +
+    TYPE(ADDRESSMAP) +
+    ADDRESS('*') +
+    USERSRC(CHANNEL) +
+    CHCKCLNT(ASQMGR) +
+    ACTION(REPLACE)
+SET AUTHREC OBJTYPE(QMGR) +
+    PRINCIPAL('app') +
+    AUTHADD(CONNECT,INQ)
+SET AUTHREC PROFILE(ORDERS.INBOUND) +
+    OBJTYPE(QUEUE) +
+    PRINCIPAL('app') +
+    AUTHADD(BROWSE,GET,INQ,DSP)
+
+* ----- SVRCONN for QMGRNHA console (remote QM registration) -----
+DEFINE CHANNEL(DEV.ADMIN.SVRCONN) +
+    CHLTYPE(SVRCONN) +
+    TRPTYPE(TCP) +
+    MCAUSER('admin') +
+    REPLACE
+SET CHLAUTH(DEV.ADMIN.SVRCONN) +
+    TYPE(ADDRESSMAP) +
+    ADDRESS('*') +
+    USERSRC(CHANNEL) +
+    CHCKCLNT(ASQMGR) +
+    ACTION(REPLACE)
+SET AUTHREC OBJTYPE(QMGR) +
+    PRINCIPAL('admin') +
+    AUTHADD(CONNECT,INQ,DSP,ALLADM)
+
+REFRESH SECURITY TYPE(CONNAUTH)

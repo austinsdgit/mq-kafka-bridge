@@ -1,0 +1,5 @@
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+pymqi==1.12.13
+pydantic==2.7.1
+confluent-kafka==2.4.0

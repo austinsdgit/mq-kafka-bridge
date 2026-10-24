@@ -1,0 +1,401 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mq-kafka-bridge-mq-creds
+  namespace: cp4i
+type: Opaque
+stringData:
+  MQ_USER: app
+  MQ_PASSWORD: admin123
+---
+# ── Browse connector  (scaled to 0 — consume+publish now owned by API) ───────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mq-kafka-browse-connector
+  namespace: cp4i
+  labels:
+    app: mq-kafka-browse-connector
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: mq-kafka-browse-connector
+  template:
+    metadata:
+      labels:
+        app: mq-kafka-browse-connector
+    spec:
+      containers:
+        - name: browse-connector
+          image: image-registry.openshift-image-registry.svc:5000/cp4i/mq-kafka-browse-connector:latest
+          imagePullPolicy: Always
+          env:
+            - name: MQ_HOST
+              value: "qmgra-ibm-mq.cp4i.svc.cluster.local"
+            - name: MQ_PORT
+              value: "1414"
+            - name: MQ_QMGR
+              value: "QMGRA"
+            - name: MQ_QUEUE
+              value: "ORDERS.INBOUND"
+            - name: MQ_CHANNEL
+              value: "BROWSE.SVRCONN"
+            - name: MQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mq-kafka-bridge-mq-creds
+                  key: MQ_USER
+            - name: MQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-kafka-bridge-mq-creds
+                  key: MQ_PASSWORD
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "tune-game-kafka-kafka-bootstrap.cp4i.svc.cluster.local:9092"
+            - name: KAFKA_TOPIC
+              value: "mq.orders.consumed"
+            - name: BROWSE_INTERVAL_SECONDS
+              value: "5"
+            - name: MQ_OVERRIDE_DATA_PATH
+              value: "/tmp/mqm"
+            - name: HOME
+              value: "/tmp"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: mqm-tmp
+              mountPath: /tmp/mqm
+      volumes:
+        - name: mqm-tmp
+          emptyDir: {}
+---
+# ── Delete connector  (targets ORDERS.INBOUND on physical QMGRB) ────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mq-kafka-delete-connector
+  namespace: cp4i
+  labels:
+    app: mq-kafka-delete-connector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mq-kafka-delete-connector
+  template:
+    metadata:
+      labels:
+        app: mq-kafka-delete-connector
+    spec:
+      containers:
+        - name: delete-connector
+          image: image-registry.openshift-image-registry.svc:5000/cp4i/mq-kafka-delete-connector:latest
+          imagePullPolicy: Always
+          env:
+            - name: MQ_HOST
+              value: "qmgrb-ibm-mq.cp4i.svc.cluster.local"
+            - name: MQ_PORT
+              value: "1414"
+            - name: MQ_QMGR
+              value: "QMGRB"
+            - name: MQ_QUEUE
+              value: "ORDERS.INBOUND"
+            - name: MQ_CHANNEL
+              value: "DELETE.SVRCONN"
+            - name: MQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mq-kafka-bridge-mq-creds
+                  key: MQ_USER
+            - name: MQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-kafka-bridge-mq-creds
+                  key: MQ_PASSWORD
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "tune-game-kafka-kafka-bootstrap.cp4i.svc.cluster.local:9092"
+            - name: KAFKA_TOPIC
+              value: "mq.orders.consumed"
+            - name: KAFKA_GROUP_ID
+              value: "mq-delete-connector"
+            - name: KAFKA_POLL_TIMEOUT_SECONDS
+              value: "5"
+            - name: THROTTLE_API_URL
+              value: "http://mq-kafka-bridge-api.cp4i.svc.cluster.local:8000/throttle"
+            - name: THROTTLE_POLL_INTERVAL_S
+              value: "10"
+            - name: EVENT_API_URL
+              value: "http://mq-kafka-bridge-api.cp4i.svc.cluster.local:8000/events/delete/publish"
+            - name: MQ_OVERRIDE_DATA_PATH
+              value: "/tmp/mqm"
+            - name: HOME
+              value: "/tmp"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: mqm-tmp
+              mountPath: /tmp/mqm
+      volumes:
+        - name: mqm-tmp
+          emptyDir: {}
+---
+# ── FastAPI ─────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mq-kafka-bridge-api
+  namespace: cp4i
+  labels:
+    app: mq-kafka-bridge-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mq-kafka-bridge-api
+  template:
+    metadata:
+      labels:
+        app: mq-kafka-bridge-api
+    spec:
+      containers:
+        - name: api
+          image: image-registry.openshift-image-registry.svc:5000/cp4i/mq-kafka-bridge-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            # PROXYQM — receives app PUTs (same physical qmgr, APP.SVRCONN channel)
+            - name: PROXYQM_HOST
+              value: "proxyqm-ibm-mq.cp4i.svc.cluster.local"
+            - name: PROXYQM_PORT
+              value: "1414"
+            - name: PROXYQM_QMGR
+              value: "PROXYQM"
+            - name: PROXYQM_CHANNEL
+              value: "APP.SVRCONN"
+            - name: PROXYQM_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mq-kafka-bridge-mq-creds
+                  key: MQ_USER
+            - name: PROXYQM_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-kafka-bridge-mq-creds
+                  key: MQ_PASSWORD
+            - name: ALIAS_QUEUE
+              value: "INPUT.ALIAS"
+            # QMGRA — browse connector reads ORDERS.INBOUND.A
+            - name: QMGRA_HOST
+              value: "qmgra-ibm-mq.cp4i.svc.cluster.local"
+            - name: QMGRA_PORT
+              value: "1414"
+            - name: QMGRA_QMGR
+              value: "QMGRA"
+            - name: QMGRA_CHANNEL
+              value: "BROWSE.SVRCONN"
+            - name: QMGRA_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mq-kafka-bridge-mq-creds
+                  key: MQ_USER
+            - name: QMGRA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-kafka-bridge-mq-creds
+                  key: MQ_PASSWORD
+            - name: QMGRA_QUEUE
+              value: "ORDERS.INBOUND"
+            # QMGRB — delete connector targets ORDERS.INBOUND.B
+            - name: QMGRB_HOST
+              value: "qmgrb-ibm-mq.cp4i.svc.cluster.local"
+            - name: QMGRB_PORT
+              value: "1414"
+            - name: QMGRB_QMGR
+              value: "QMGRB"
+            - name: QMGRB_CHANNEL
+              value: "DELETE.SVRCONN"
+            - name: QMGRB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mq-kafka-bridge-mq-creds
+                  key: MQ_USER
+            - name: QMGRB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-kafka-bridge-mq-creds
+                  key: MQ_PASSWORD
+            - name: QMGRB_QUEUE
+              value: "ORDERS.INBOUND"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "tune-game-kafka-kafka-bootstrap.cp4i.svc.cluster.local:9092"
+            - name: KAFKA_CONSUME_TOPIC
+              value: "mq.orders.consumed"
+            - name: MQ_OVERRIDE_DATA_PATH
+              value: "/tmp/mqm"
+            - name: HOME
+              value: "/tmp"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: mqm-tmp
+              mountPath: /tmp/mqm
+      volumes:
+        - name: mqm-tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mq-kafka-bridge-api
+  namespace: cp4i
+spec:
+  selector:
+    app: mq-kafka-bridge-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+# ── React UI ────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mq-kafka-bridge-ui
+  namespace: cp4i
+  labels:
+    app: mq-kafka-bridge-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mq-kafka-bridge-ui
+  template:
+    metadata:
+      labels:
+        app: mq-kafka-bridge-ui
+    spec:
+      containers:
+        - name: ui
+          image: image-registry.openshift-image-registry.svc:5000/cp4i/mq-kafka-bridge-ui:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: mq-kafka-bridge-nginx-conf
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mq-kafka-bridge-nginx-conf
+  namespace: cp4i
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      location / {
+        root /usr/share/nginx/html;
+        try_files $uri $uri/ /index.html;
+      }
+      location ~ ^/(messages|queue|throttle|health) {
+        proxy_pass http://mq-kafka-bridge-api.cp4i.svc.cluster.local:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+      }
+
+      # SSE stream — disable buffering so events reach the browser immediately
+      location /events/ {
+        proxy_pass http://mq-kafka-bridge-api.cp4i.svc.cluster.local:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        chunked_transfer_encoding on;
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mq-kafka-bridge-ui
+  namespace: cp4i
+spec:
+  selector:
+    app: mq-kafka-bridge-ui
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mq-kafka-bridge-ui
+  namespace: cp4i
+spec:
+  to:
+    kind: Service
+    name: mq-kafka-bridge-ui
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mq-kafka-bridge-api
+  namespace: cp4i
+spec:
+  to:
+    kind: Service
+    name: mq-kafka-bridge-api
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

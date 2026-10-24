@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: srcqm-mqsc
+  namespace: mq-kafka-bridge
+data:
+  # Mounted at /etc/mqm/init.mqsc — applied automatically on container start
+  init.mqsc: |
+    DEFINE TOPIC('ORDERS.INPUT') TOPICSTR('ORDERS/INPUT') DEFPSIST(YES) REPLACE
+    DEFINE QALIAS(INPUT.ALIAS) TARGTYPE(TOPIC) TARGET('ORDERS.INPUT') DEFPSIST(YES) REPLACE
+    DEFINE QLOCAL(XMITQ.TGTQM.CH1) USAGE(XMITQ) DEFPSIST(YES) REPLACE
+    DEFINE QLOCAL(XMITQ.TGTQM.CH2) USAGE(XMITQ) DEFPSIST(YES) REPLACE
+    DEFINE QREMOTE(REMOTE.ORDERS.Q1) RNAME(ORDERS.INBOUND) RQMNAME(TGTQM) XMITQ(XMITQ.TGTQM.CH1) DEFPSIST(YES) REPLACE
+    DEFINE QREMOTE(REMOTE.ORDERS.Q2) RNAME(ORDERS.INBOUND) RQMNAME(TGTQM) XMITQ(XMITQ.TGTQM.CH2) DEFPSIST(YES) REPLACE
+    DEFINE SUB(SUB.ORDERS.HA1) TOPICOBJ('ORDERS.INPUT') DEST(REMOTE.ORDERS.Q1) DEFPSIST(YES) REPLACE
+    DEFINE SUB(SUB.ORDERS.HA2) TOPICOBJ('ORDERS.INPUT') DEST(REMOTE.ORDERS.Q2) DEFPSIST(YES) REPLACE
+    DEFINE CHANNEL(TO.TGTQM.CH1) CHLTYPE(SDR) CONNAME('tgtqm-svc.mq-kafka-bridge.svc.cluster.local(1414)') XMITQ(XMITQ.TGTQM.CH1) TRPTYPE(TCP) REPLACE
+    DEFINE CHANNEL(TO.TGTQM.CH2) CHLTYPE(SDR) CONNAME('tgtqm-svc.mq-kafka-bridge.svc.cluster.local(1415)') XMITQ(XMITQ.TGTQM.CH2) TRPTYPE(TCP) REPLACE
+    DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') REPLACE
+    SET CHLAUTH(APP.SVRCONN) TYPE(BLOCKUSER) USERLIST('nobody') ACTION(REPLACE)
+    START CHANNEL(TO.TGTQM.CH1)
+    START CHANNEL(TO.TGTQM.CH2)
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: srcqm
+  namespace: mq-kafka-bridge
+spec:
+  serviceName: srcqm
+  replicas: 1
+  selector:
+    matchLabels:
+      app: srcqm
+  template:
+    metadata:
+      labels:
+        app: srcqm
+    spec:
+      containers:
+        - name: qmgr
+          image: icr.io/ibm-messaging/mq:latest
+          env:
+            - name: LICENSE
+              value: accept
+            - name: MQ_QMGR_NAME
+              value: SRCQM
+          ports:
+            - containerPort: 1414
+              name: listener
+            - containerPort: 9443
+              name: console
+          volumeMounts:
+            - name: mqsc-config
+              mountPath: /etc/mqm/init.mqsc
+              subPath: init.mqsc
+            - name: data
+              mountPath: /mnt/mqm
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      volumes:
+        - name: mqsc-config
+          configMap:
+            name: srcqm-mqsc
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: srcqm-svc
+  namespace: mq-kafka-bridge
+spec:
+  selector:
+    app: srcqm
+  ports:
+    - name: mq
+      port: 1414
+      targetPort: 1414
+    - name: console
+      port: 9443
+      targetPort: 9443

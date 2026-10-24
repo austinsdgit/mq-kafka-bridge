@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: delete-connector
+  namespace: mq-kafka-bridge
+  labels:
+    app: delete-connector
+spec:
+  replicas: 1   # single instance — exclusive queue lock requires it
+  selector:
+    matchLabels:
+      app: delete-connector
+  template:
+    metadata:
+      labels:
+        app: delete-connector
+    spec:
+      containers:
+        - name: delete-connector
+          image: your-registry/delete-connector:latest   # replace with your image
+          imagePullPolicy: Always
+          env:
+            - name: MQ_HOST
+              value: "tgtqm-svc.mq-kafka-bridge.svc.cluster.local"
+            - name: MQ_PORT
+              value: "1414"
+            - name: MQ_QMGR
+              value: "TGTQM"
+            - name: MQ_QUEUE
+              value: "ORDERS.INBOUND"
+            - name: MQ_CHANNEL
+              value: "PYTHON.SVRCONN"
+            - name: MQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mq-credentials
+                  key: MQ_USER
+            - name: MQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mq-credentials
+                  key: MQ_PASSWORD
+            # Secondary cluster — MM2 has replicated the topic here
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka-secondary-kafka-bootstrap.kafka-secondary.svc.cluster.local:9092"
+            - name: KAFKA_TOPIC
+              value: "mq.orders.correlids"
+            - name: KAFKA_GROUP_ID
+              value: "mq-delete-connector"
+            - name: KAFKA_POLL_TIMEOUT_SECONDS
+              value: "5"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import os; os.getpid()"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+      restartPolicy: Always

@@ -1,0 +1,45 @@
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaMirrorMaker2
+metadata:
+  name: mm2-primary-to-secondary
+  # Deploy MM2 in the secondary namespace so it is co-located with its
+  # target cluster and can use the internal service DNS.
+  namespace: kafka-secondary
+spec:
+  version: 3.7.0
+  replicas: 2
+  connectCluster: kafka-secondary
+  clusters:
+    - alias: primary
+      bootstrapServers: kafka-primary-kafka-bootstrap.kafka-primary.svc.cluster.local:9092
+      config:
+        # No TLS for internal cluster communication (add if needed)
+        security.protocol: PLAINTEXT
+    - alias: secondary
+      bootstrapServers: kafka-secondary-kafka-bootstrap.kafka-secondary.svc.cluster.local:9092
+      config:
+        security.protocol: PLAINTEXT
+  mirrors:
+    - sourceCluster: primary
+      targetCluster: secondary
+      sourceConnector:
+        # Replicate only the correlId topic produced by the browse connector
+        tasksMax: 2
+        config:
+          replication.factor: 3
+          offset-syncs.topic.replication.factor: 3
+          sync.topic.acls.enabled: "false"
+          replication.policy.class: org.apache.kafka.connect.mirror.IdentityReplicationPolicy
+      heartbeatConnector:
+        config:
+          heartbeats.topic.replication.factor: 3
+      checkpointConnector:
+        config:
+          checkpoints.topic.replication.factor: 3
+          # Sync consumer group offsets every 10 s so the delete connector
+          # resumes from the right position after a restart.
+          sync.group.offsets.enabled: "true"
+          sync.group.offsets.interval.seconds: "10"
+          groups: "mq-delete-connector"
+      topicsPattern: "mq\\.orders\\.correlids"
+      groupsPattern: "mq-delete-connector"
