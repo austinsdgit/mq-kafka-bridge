@@ -1,0 +1,487 @@
+<mxfile host="app.diagrams.net" modified="2025-01-01T00:00:00.000Z" agent="Bob" version="24.0.0" type="device">
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PAGE 1 — LOGICAL ARCHITECTURE                                  -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <diagram id="logical" name="Logical Architecture">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+
+        <!-- ══ Title ══ -->
+        <mxCell id="title" value="MQ-Kafka Bridge — Logical Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=18;fontStyle=1;fontColor=#1f2328;" vertex="1" parent="1">
+          <mxGeometry x="560" y="20" width="800" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!-- ZONE: Publisher App                                        -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <mxCell id="z_pub" value="Publisher" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="320" width="120" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="z_pub_note" value="MQPUT to&#xa;INPUT.ALIAS" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#57606a;" vertex="1" parent="1">
+          <mxGeometry x="60" y="372" width="120" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!-- ZONE: SRCQM                                                -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <mxCell id="grp_srcqm" value="SRCQM  (IBM MQ — Source Queue Manager)" style="swimlane;startSize=30;fillColor=#fff2cc;strokeColor=#d6b656;fontColor=#333333;fontStyle=1;fontSize=12;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="260" y="200" width="420" height="310" as="geometry" />
+        </mxCell>
+
+        <mxCell id="src_alias" value="INPUT.ALIAS&#xa;(QALIAS → topic ORDERS.INPUT)" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="grp_srcqm">
+          <mxGeometry x="20" y="50" width="195" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="src_topic" value="ORDERS.INPUT&#xa;(topic ORDERS/INPUT)" style="shape=mxgraph.ibm.topic;fillColor=#f0a30a;strokeColor=#6c6c6c;fontSize=10;fontColor=#000000;" vertex="1" parent="grp_srcqm">
+          <mxGeometry x="20" y="145" width="195" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="src_sub1" value="SUB.ORDERS.HA1&#xa;→ REMOTE.ORDERS.Q1" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="grp_srcqm">
+          <mxGeometry x="240" y="80" width="160" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="src_sub2" value="SUB.ORDERS.HA2&#xa;→ REMOTE.ORDERS.Q2" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="grp_srcqm">
+          <mxGeometry x="240" y="170" width="160" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="src_xmit1" value="XMITQ.TGTQM.CH1&#xa;SDR: TO.TGTQM.CH1&#xa;→ port 1414" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="grp_srcqm">
+          <mxGeometry x="240" y="240" width="160" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="src_xmit2" value="XMITQ.TGTQM.CH2&#xa;SDR: TO.TGTQM.CH2&#xa;→ port 1415" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="grp_srcqm">
+          <mxGeometry x="80" y="240" width="160" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- SRCQM internal edges -->
+        <mxCell id="e_alias_topic" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="src_alias" target="src_topic" parent="grp_srcqm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_topic_sub1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;" edge="1" source="src_topic" target="src_sub1" parent="grp_srcqm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_topic_sub2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;" edge="1" source="src_topic" target="src_sub2" parent="grp_srcqm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sub1_xmit1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;" edge="1" source="src_sub1" target="src_xmit1" parent="grp_srcqm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sub2_xmit2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;" edge="1" source="src_sub2" target="src_xmit2" parent="grp_srcqm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!-- ZONE: TGTQM                                                -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <mxCell id="grp_tgtqm" value="TGTQM  (IBM MQ — Target Queue Manager)" style="swimlane;startSize=30;fillColor=#fff2cc;strokeColor=#d6b656;fontColor=#333333;fontStyle=1;fontSize=12;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="760" y="200" width="340" height="220" as="geometry" />
+        </mxCell>
+
+        <mxCell id="tgt_rcv1" value="RCVR: FROM.SRCQM.CH1&#xa;Listener :1414" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="grp_tgtqm">
+          <mxGeometry x="20" y="50" width="140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="tgt_rcv2" value="RCVR: FROM.SRCQM.CH2&#xa;Listener :1415" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="grp_tgtqm">
+          <mxGeometry x="180" y="50" width="140" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="tgt_inbound" value="ORDERS.INBOUND&#xa;(persistent local queue)" style="shape=mxgraph.ibm.queue;fillColor=#f0a30a;strokeColor=#6c6c6c;fontSize=10;fontColor=#000000;" vertex="1" parent="grp_tgtqm">
+          <mxGeometry x="110" y="135" width="120" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="tgt_svrconn" value="SVRCONN: PYTHON.SVRCONN&#xa;(browse &amp; delete connectors)" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="grp_tgtqm">
+          <mxGeometry x="20" y="170" width="70" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_rcv1_q" style="edgeStyle=orthogonalEdgeStyle;rounded=0;" edge="1" source="tgt_rcv1" target="tgt_inbound" parent="grp_tgtqm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_rcv2_q" style="edgeStyle=orthogonalEdgeStyle;rounded=0;" edge="1" source="tgt_rcv2" target="tgt_inbound" parent="grp_tgtqm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!-- ZONE: Browse Connector                                     -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <mxCell id="grp_browse" value="Browse Connector  (Python / pymqi)" style="swimlane;startSize=30;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#333333;fontStyle=1;fontSize=12;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="760" y="480" width="340" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="bc_loop" value="consume_and_publish()&#xa;Every BROWSE_INTERVAL_SECONDS&#xa;(default: 5 s)" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="grp_browse">
+          <mxGeometry x="20" y="45" width="180" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="bc_produce" value="Kafka Producer&#xa;topic: mq.orders.consumed&#xa;key = CorrelId (hex)&#xa;acks=all, idempotent" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="grp_browse">
+          <mxGeometry x="220" y="45" width="100" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="bc_note" value="Destructively GETs all msgs from ORDERS.INBOUND&#xa;MQOO_INPUT_EXCLUSIVE · publishes 1 Kafka event per msg" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#57606a;" vertex="1" parent="grp_browse">
+          <mxGeometry x="10" y="140" width="320" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!-- ZONE: Kafka Primary                                        -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <mxCell id="grp_kafka_p" value="PRIMARY Kafka Cluster  (Strimzi / Confluent)" style="swimlane;startSize=30;fillColor=#e1d5e7;strokeColor=#9673a6;fontColor=#333333;fontStyle=1;fontSize=12;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="400" width="300" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="kp_broker" value="Kafka Broker&#xa;port 9092" style="shape=mxgraph.ibm.server;fillColor=#9673a6;strokeColor=#6c6c6c;fontSize=10;fontColor=#ffffff;" vertex="1" parent="grp_kafka_p">
+          <mxGeometry x="20" y="50" width="80" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="kp_topic" value="topic: mq.orders.consumed&#xa;(key = CorrelId hex)" style="rounded=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="grp_kafka_p">
+          <mxGeometry x="120" y="55" width="160" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!-- ZONE: MirrorMaker 2                                        -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <mxCell id="grp_mm2" value="MirrorMaker 2  (async replication)" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontStyle=1;fontSize=12;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="610" width="300" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="mm2_box" value="IdentityReplicationPolicy&#xa;primary→secondary&#xa;topic: mq.orders.consumed&#xa;group offset sync every 10 s" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="grp_mm2">
+          <mxGeometry x="20" y="40" width="260" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!-- ZONE: Kafka Secondary                                      -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <mxCell id="grp_kafka_s" value="SECONDARY Kafka Cluster  (Strimzi / Confluent)" style="swimlane;startSize=30;fillColor=#e1d5e7;strokeColor=#9673a6;fontColor=#333333;fontStyle=1;fontSize=12;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="780" width="300" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="ks_broker" value="Kafka Broker&#xa;port 9093" style="shape=mxgraph.ibm.server;fillColor=#9673a6;strokeColor=#6c6c6c;fontSize=10;fontColor=#ffffff;" vertex="1" parent="grp_kafka_s">
+          <mxGeometry x="20" y="50" width="80" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ks_topic" value="topic: mq.orders.consumed&#xa;(replicated by MM2)" style="rounded=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="grp_kafka_s">
+          <mxGeometry x="120" y="55" width="160" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!-- ZONE: Delete Connector                                     -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <mxCell id="grp_delete" value="Delete Connector  (Python / pymqi)" style="swimlane;startSize=30;fillColor=#f8cecc;strokeColor=#b85450;fontColor=#333333;fontStyle=1;fontSize=12;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="760" y="740" width="340" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dc_consume" value="Kafka Consumer&#xa;group: mq-delete-connector&#xa;manual offset commit&#xa;auto.offset.reset=earliest" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="grp_delete">
+          <mxGeometry x="20" y="45" width="140" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="dc_delete" value="delete_by_correl_id()&#xa;MQOO_INPUT_EXCLUSIVE&#xa;MQMO_MATCH_CORREL_ID&#xa;GET 1 msg, commit offset" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="grp_delete">
+          <mxGeometry x="180" y="45" width="140" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="dc_throttle" value="Throttle: polls GET /throttle every 10 s&#xa;enabled=false → pauses · rate_per_min → sleep" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#57606a;" vertex="1" parent="grp_delete">
+          <mxGeometry x="10" y="130" width="320" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="dc_event" value="POST /events/delete/publish → API SSE bus" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#57606a;" vertex="1" parent="grp_delete">
+          <mxGeometry x="10" y="158" width="320" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!-- ZONE: API + UI                                             -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <mxCell id="grp_api" value="FastAPI Service + React UI  (port 8000 / 5173)" style="swimlane;startSize=30;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#333333;fontStyle=1;fontSize=12;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="260" y="680" width="420" height="260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="api_put" value="POST /messages&#xa;PUT to INPUT.ALIAS&#xa;on PROXYQM→SRCQM" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="grp_api">
+          <mxGeometry x="20" y="50" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="api_depth" value="GET /queue/depth/a|b&#xa;MQINQ on QMGRA+QMGRB" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="grp_api">
+          <mxGeometry x="175" y="50" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="api_consume" value="POST /queue/a/consume&#xa;Destructive GET + Kafka&#xa;produce (correl_id key)" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="grp_api">
+          <mxGeometry x="20" y="130" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="api_throttle" value="GET/PUT /throttle&#xa;in-process state&#xa;enable / rate_per_min" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="grp_api">
+          <mxGeometry x="175" y="130" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="api_sse" value="GET /events/delete  (SSE)&#xa;POST /events/delete/publish&#xa;asyncio queue fanout" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="grp_api">
+          <mxGeometry x="310" y="50" width="90" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="api_ui_note" value="React/Vite UI: compose messages · watch queue depths · throttle panel · delete event stream" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#57606a;" vertex="1" parent="grp_api">
+          <mxGeometry x="10" y="222" width="395" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!-- CROSS-ZONE EDGES                                           -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+
+        <!-- Publisher → SRCQM INPUT.ALIAS -->
+        <mxCell id="e_pub_src" value="MQPUT" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;fontColor=#6c8ebf;fontSize=9;" edge="1" source="z_pub" target="src_alias" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- API → SRCQM (POST /messages) -->
+        <mxCell id="e_api_src" value="MQPUT&#xa;via pymqi" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;fontColor=#6c8ebf;fontSize=9;" edge="1" source="api_put" target="src_alias" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="330" y="660" />
+              <mxPoint x="330" y="355" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- SRCQM xmit1 → TGTQM rcv1 -->
+        <mxCell id="e_ch1" value="SDR→RCVR CH1&#xa;port 1414" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d6b656;fontColor=#6c6c6c;fontSize=9;" edge="1" source="src_xmit1" target="tgt_rcv1" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- SRCQM xmit2 → TGTQM rcv2 -->
+        <mxCell id="e_ch2" value="SDR→RCVR CH2&#xa;port 1415" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d6b656;fontColor=#6c6c6c;fontSize=9;" edge="1" source="src_xmit2" target="tgt_rcv2" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="640" y="455" />
+              <mxPoint x="640" y="265" />
+              <mxPoint x="840" y="265" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- TGTQM → Browse Connector (SVRCONN) -->
+        <mxCell id="e_tgt_browse" value="MQGMO_INPUT_EXCLUSIVE&#xa;SVRCONN" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#82b366;fontColor=#82b366;fontSize=9;" edge="1" source="tgt_inbound" target="bc_loop" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="930" y="415" />
+              <mxPoint x="930" y="545" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Browse Connector → Kafka Primary -->
+        <mxCell id="e_browse_kp" value="produce&#xa;CorrelId events" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#9673a6;fontColor=#9673a6;fontSize=9;" edge="1" source="bc_produce" target="kp_topic" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Kafka Primary → MM2 -->
+        <mxCell id="e_kp_mm2" value="replicate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#666666;fontColor=#666666;fontSize=9;" edge="1" source="kp_topic" target="mm2_box" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- MM2 → Kafka Secondary -->
+        <mxCell id="e_mm2_ks" value="replicate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#666666;fontColor=#666666;fontSize=9;" edge="1" source="mm2_box" target="ks_topic" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Kafka Secondary → Delete Connector -->
+        <mxCell id="e_ks_delete" value="consume&#xa;(manual commit)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;fontColor=#b85450;fontSize=9;" edge="1" source="ks_topic" target="dc_consume" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Delete Connector → TGTQM (destructive GET) -->
+        <mxCell id="e_delete_tgt" value="MQGET by CorrelId&#xa;MQOO_INPUT_EXCLUSIVE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;fontColor=#b85450;fontSize=9;" edge="1" source="dc_delete" target="tgt_inbound" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="810" />
+              <mxPoint x="1000" y="390" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Delete Connector → API (throttle poll) -->
+        <mxCell id="e_delete_throttle" value="GET /throttle&#xa;every 10 s" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;fontColor=#6c8ebf;dashed=1;fontSize=9;" edge="1" source="dc_throttle" target="api_throttle" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Delete Connector → API (SSE publish) -->
+        <mxCell id="e_delete_sse" value="POST /events/delete/publish" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;fontColor=#6c8ebf;dashed=1;fontSize=9;" edge="1" source="dc_event" target="api_sse" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- API /queue/depth → TGTQM -->
+        <mxCell id="e_api_depth_tgt" value="MQINQ depth" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;fontColor=#6c8ebf;dashed=1;fontSize=9;" edge="1" source="api_depth" target="tgt_inbound" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="680" y="700" />
+              <mxPoint x="680" y="380" />
+              <mxPoint x="870" y="380" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PAGE 2 — DATA FLOW                                             -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <diagram id="dataflow" name="Data Flow">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="df_title" value="MQ-Kafka Bridge — Message Data Flow" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=18;fontStyle=1;fontColor=#1f2328;" vertex="1" parent="1">
+          <mxGeometry x="560" y="20" width="800" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- Step labels column header -->
+        <mxCell id="lbl_steps" value="Step" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="20" y="70" width="60" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ── Step 1 ── -->
+        <mxCell id="s1_lbl" value="①" style="ellipse;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="120" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s1_pub" value="Publisher App&#xa;(or UI POST /messages)" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="115" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s1_note" value="MQPUT → INPUT.ALIAS on SRCQM" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#57606a;" vertex="1" parent="1">
+          <mxGeometry x="285" y="128" width="260" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- ── Step 2 ── -->
+        <mxCell id="s2_lbl" value="②" style="ellipse;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="210" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s2_src" value="SRCQM&#xa;INPUT.ALIAS → ORDERS.INPUT topic&#xa;SUB.ORDERS.HA1 + SUB.ORDERS.HA2&#xa;→ REMOTE queues → XMITQ → SDR ch" style="rounded=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="100" y="200" width="170" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="s2_note" value="Pub/sub fan-out onto two HA sender channels (CH1 port 1414, CH2 port 1415).&#xa;Both deliver to ORDERS.INBOUND on TGTQM — HA pair, not duplicate delivery." style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#57606a;" vertex="1" parent="1">
+          <mxGeometry x="285" y="208" width="440" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ── Step 3 ── -->
+        <mxCell id="s3_lbl" value="③" style="ellipse;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="315" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_tgt" value="TGTQM&#xa;ORDERS.INBOUND&#xa;(messages accumulate)" style="shape=mxgraph.ibm.queue;fillColor=#f0a30a;strokeColor=#6c6c6c;fontSize=10;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="100" y="305" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_note" value="Messages land on ORDERS.INBOUND via receiver channels FROM.SRCQM.CH1 / CH2.&#xa;SVRCONN PYTHON.SVRCONN available for browse and delete connectors." style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#57606a;" vertex="1" parent="1">
+          <mxGeometry x="285" y="313" width="440" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ── Step 4 ── -->
+        <mxCell id="s4_lbl" value="④" style="ellipse;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="415" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s4_browse" value="Browse Connector&#xa;consume_and_publish()&#xa;every BROWSE_INTERVAL_SECONDS" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="408" width="170" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="s4_note" value="Destructively GETs ALL messages from ORDERS.INBOUND with MQOO_INPUT_EXCLUSIVE.&#xa;For each message: extracts CorrelId + MsgId, produces 1 Kafka event to mq.orders.consumed.&#xa;key = CorrelId hex · value = JSON {queue, qmgr, correl_id, msg_id, timestamp_utc}" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#57606a;" vertex="1" parent="1">
+          <mxGeometry x="285" y="408" width="500" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ── Step 5 ── -->
+        <mxCell id="s5_lbl" value="⑤" style="ellipse;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="515" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s5_kp" value="PRIMARY Kafka&#xa;topic: mq.orders.consumed&#xa;acks=all · idempotent producer" style="rounded=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="508" width="170" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="s5_note" value="Each Kafka record carries the CorrelId of one consumed MQ message.&#xa;Topic retained 24 h. Partition key = CorrelId ensures ordering per message." style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#57606a;" vertex="1" parent="1">
+          <mxGeometry x="285" y="516" width="440" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ── Step 6 ── -->
+        <mxCell id="s6_lbl" value="⑥" style="ellipse;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="610" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s6_mm2" value="MirrorMaker 2&#xa;IdentityReplicationPolicy&#xa;primary→secondary" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="603" width="170" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="s6_note" value="Asynchronously replicates mq.orders.consumed to the secondary cluster.&#xa;Also syncs consumer group offsets for mq-delete-connector every 10 s (failover support)." style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#57606a;" vertex="1" parent="1">
+          <mxGeometry x="285" y="611" width="440" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ── Step 7 ── -->
+        <mxCell id="s7_lbl" value="⑦" style="ellipse;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="705" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s7_ks" value="SECONDARY Kafka&#xa;topic: mq.orders.consumed&#xa;(replicated)" style="rounded=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="698" width="170" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="s7_note" value="Delete connector reads from here — isolation from the primary cluster." style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#57606a;" vertex="1" parent="1">
+          <mxGeometry x="285" y="713" width="400" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- ── Step 8 ── -->
+        <mxCell id="s8_lbl" value="⑧" style="ellipse;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="800" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s8_delete" value="Delete Connector&#xa;delete_by_correl_id()&#xa;MQOO_INPUT_EXCLUSIVE&#xa;MQMO_MATCH_CORREL_ID" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="793" width="170" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="s8_note" value="Polls throttle API every 10 s — pauses if enabled=false, sleeps 60/rate_per_min between cycles.&#xa;Connects to TGTQM ORDERS.INBOUND, issues MQGET with MQMO_MATCH_CORREL_ID.&#xa;Offset committed ONLY after MQ GET succeeds → at-least-once delete semantics.&#xa;Posts DELETE event to API SSE bus on success." style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#57606a;" vertex="1" parent="1">
+          <mxGeometry x="285" y="800" width="500" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- ── Step 9 ── -->
+        <mxCell id="s9_lbl" value="⑨" style="ellipse;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="915" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s9_api" value="FastAPI SSE Bus&#xa;GET /events/delete" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="908" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s9_note" value="Each browser tab that has connected to GET /events/delete receives the delete event&#xa;in real-time via the asyncio.Queue fanout. keepalive pings sent every 15 s." style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#57606a;" vertex="1" parent="1">
+          <mxGeometry x="285" y="916" width="440" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ── Vertical connector line ── -->
+        <mxCell id="flow_line" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#1f2328;strokeWidth=2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="s1_pub" target="s2_src" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fl2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#1f2328;strokeWidth=2;" edge="1" source="s2_src" target="s3_tgt" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fl3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#1f2328;strokeWidth=2;" edge="1" source="s3_tgt" target="s4_browse" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fl4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#1f2328;strokeWidth=2;" edge="1" source="s4_browse" target="s5_kp" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fl5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#1f2328;strokeWidth=2;" edge="1" source="s5_kp" target="s6_mm2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fl6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#1f2328;strokeWidth=2;" edge="1" source="s6_mm2" target="s7_ks" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fl7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#1f2328;strokeWidth=2;" edge="1" source="s7_ks" target="s8_delete" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fl8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#1f2328;strokeWidth=2;" edge="1" source="s8_delete" target="s9_api" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ── Legend ── -->
+        <mxCell id="legend_bg" value="Legend" style="swimlane;startSize=24;fillColor=#f7f8fa;strokeColor=#e5e7eb;fontStyle=1;fontSize=11;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="120" width="340" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" value="" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="legend_bg">
+          <mxGeometry x="15" y="40" width="40" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1t" value="Publisher / API / React UI" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="legend_bg">
+          <mxGeometry x="65" y="40" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" value="" style="rounded=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="legend_bg">
+          <mxGeometry x="15" y="75" width="40" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2t" value="IBM MQ (SRCQM / TGTQM)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="legend_bg">
+          <mxGeometry x="65" y="75" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" value="" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="legend_bg">
+          <mxGeometry x="15" y="110" width="40" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3t" value="Browse Connector (Python / pymqi)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="legend_bg">
+          <mxGeometry x="65" y="110" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4" value="" style="rounded=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="legend_bg">
+          <mxGeometry x="15" y="145" width="40" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4t" value="Kafka (Primary + Secondary clusters)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="legend_bg">
+          <mxGeometry x="65" y="145" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5" value="" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="legend_bg">
+          <mxGeometry x="15" y="180" width="40" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5t" value="MirrorMaker 2 (async replication)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="legend_bg">
+          <mxGeometry x="65" y="180" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6" value="" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="legend_bg">
+          <mxGeometry x="15" y="215" width="40" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6t" value="Delete Connector (Python / pymqi)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="legend_bg">
+          <mxGeometry x="65" y="215" width="250" height="20" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+</mxfile>
